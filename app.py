@@ -64,7 +64,7 @@ def save_survey():
         c.execute(
             "INSERT INTO responses (timestamp, gioitinh, dienthoai, gopy, ip_client) VALUES (?, ?, ?, ?, ?)",
             (
-                data.get('timestamp', datetime.now())#.strftime('%d/%m/%Y %H:%M:%S')),
+                data.get('timestamp', datetime.now())strftime('%d/%m/%Y %H:%M:%S')),
                 data['gioitinh'].strip(),
                 data['dienthoai'].strip(),
                 data['gopy'].strip(),
@@ -142,7 +142,7 @@ def admin():
 </style></head>
 <body>
   <h2>📋 Dữ liệu phản ánh, góp ý của khách hàng – Bệnh viện đa khoa Tâm Phúc</h2>
-  <div class="meta">Cập nhật: {datetime.now()}</div>
+  <div class="meta">Cập nhật: {datetime.now().strftime('%d/%m/%Y')}</div>
   <div class="total">Tổng: {total} góp ý</div>
   <table>
     <tr><th>#</th><th>Thời gian gửi</th><th>Giới tính</th><th>Số điện thoại</th><th>Nội dung góp ý</th></tr>
