@@ -64,7 +64,7 @@ def save_survey():
         c.execute(
             "INSERT INTO responses (timestamp, gioitinh, dienthoai, gopy, ip_client) VALUES (?, ?, ?, ?, ?)",
             (
-                data.get('timestamp', datetime.now())strftime('%d/%m/%Y %H:%M:%S')),
+                data.get('timestamp', datetime.now().strftime('%d/%m/%Y %H:%M:%S')),
                 data['gioitinh'].strip(),
                 data['dienthoai'].strip(),
                 data['gopy'].strip(),
