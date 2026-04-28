@@ -1,33 +1,41 @@
 """
-Bệnh viện đa khoa Tâm Phúc – Công cụ Tiếp nhận phản ánh, góp ý của Khách hàng
+Bệnh viện đa khoa Tâm Phúc – Công cụ tiếp nhận phản ánh, góp ý của khách hàng
 Chạy được cả LOCAL lẫn CLOUD (Render.com)
 """
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import (Flask, request, jsonify, send_from_directory,
+                   session, redirect, url_for, render_template_string)
 from flask_cors import CORS
-import sqlite3
-import os
+import sqlite3, os, requests
 from datetime import datetime, timedelta
 
-
 app = Flask(__name__)
-CORS(app)  # Cho phép mọi origin trên Internet
+CORS(app)
+
 # ══════════════════════════════════════════════════════
-#  CẤU HÌNH BẢO MẬT – CHỈ SỬA Ở ĐÂY
+#  ⚙ CẤU HÌNH – CHỈ SỬA PHẦN NÀY
 # ══════════════════════════════════════════════════════
-SECRET_KEY    = "tamphuc@2026!xyz"   # ← Đổi thành chuỗi bí mật bất kỳ
-ADMIN_PATH    = "quantritamphuc"      # ← Đường dẫn bí mật (không dùng /admin)
-ADMIN_USER    = "tamphuc"            # ← Tên đăng nhập
-ADMIN_PASS    = "Abc@123456"         # ← Mật khẩu (đổi thành mật khẩu mạnh)
+SECRET_KEY = "tamphuc@2026!xyz"   # ← Đổi thành chuỗi bí mật bất kỳ
+ADMIN_PATH = "quantritamphuc"     # ← Đường dẫn bí mật (không dùng /admin)
+ADMIN_USER = "tamphuc"            # ← Tên đăng nhập
+ADMIN_PASS = "Abc@123456"         # ← Mật khẩu mạnh
 
 app.secret_key = SECRET_KEY
 
+# ── Đường dẫn database ───────────────────────────────
+# Render.com: dùng /tmp (thư mục ghi được trên free tier)
+# Local:      cùng thư mục với app.py
+IS_CLOUD = bool(os.environ.get('RENDER'))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH  = os.path.join(BASE_DIR, 'survey.db')
+DB_PATH  = '/tmp/survey.db' if IS_CLOUD else os.path.join(BASE_DIR, 'survey.db')
 
-TELEGRAM_TOKEN   = ""
-TELEGRAM_CHAT_ID = ""
+# ── Telegram (để trống nếu chưa dùng) ───────────────
+TELEGRAM_TOKEN   = ""   # VD: "7123456789:AAGxxxxxxx"
+TELEGRAM_CHAT_ID = ""   # VD: "-1001234567890"
 
+# ══════════════════════════════════════════════════════
+#  HELPERS
+# ══════════════════════════════════════════════════════
 def send_telegram(msg):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         return
@@ -40,19 +48,17 @@ def send_telegram(msg):
     except Exception as e:
         print(f"Telegram lỗi: {e}")
 
+def now_vn():
+    """Giờ Việt Nam: Render chạy UTC nên +7, local lấy giờ máy."""
+    return (datetime.utcnow() + timedelta(hours=7)) if IS_CLOUD else datetime.now()
 
+def logged_in():
+    return session.get('logged_in') is True
 
-# ── Đường dẫn database ────────────────────────────────────────────────────────
-# Render.com dùng /tmp để ghi file (thư mục ghi được trên free tier)
-# Local dùng cùng thư mục với app.py
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH  = os.path.join('/tmp', 'survey.db') if os.environ.get('RENDER') else os.path.join(BASE_DIR, 'survey.db')
-
-# ── Khởi tạo database ─────────────────────────────────────────────────────────
+# ── Khởi tạo database ────────────────────────────────
 def init_db():
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS responses (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT,
@@ -67,68 +73,65 @@ def init_db():
     print(f"✅ Database: {DB_PATH}")
 
 init_db()
-def check_login():
-    return session.get('logged_in') is True
-    
-# ── Phục vụ giao diện HTML ────────────────────────────────────────────────────
+
+# ══════════════════════════════════════════════════════
+#  ROUTES – GIAO DIỆN
+# ══════════════════════════════════════════════════════
 @app.route('/')
 def index():
     return send_from_directory(BASE_DIR, 'index.html')
 
 @app.route('/<path:filename>')
-@app.route('/<path:f>')
-def static_files(f):
-    # Chặn truy cập trực tiếp vào file nội bộ
+def static_files(filename):
     blocked = ['app.py', 'wsgi.py', 'survey.db', '.env']
-    if f in blocked or f.startswith('.'):
+    if filename in blocked or filename.startswith('.'):
         return "Không tìm thấy.", 404
-    return send_from_directory(BASE_DIR, f)
+    return send_from_directory(BASE_DIR, filename)
 
-# ── API: Lưu khảo sát ─────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════
+#  ROUTES – API
+# ══════════════════════════════════════════════════════
 @app.route('/save', methods=['POST'])
 def save_survey():
     try:
-        data = request.json
-        if not data:
-            return jsonify({"status": "error", "message": "Không có dữ liệu"}), 400
-
+        data = request.json or {}
         for field in ['gioitinh', 'dienthoai', 'gopy']:
             if not data.get(field, '').strip():
-                return jsonify({"status": "error", "message": f"Thiếu trường: {field}"}), 400
+                return jsonify({"status": "error", "message": f"Thiếu: {field}"}), 400
+
+        ts = data.get('timestamp') or now_vn().strftime('%d/%m/%Y %H:%M:%S')
 
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute(
-            "INSERT INTO responses (timestamp, gioitinh, dienthoai, gopy, ip_client) VALUES (?, ?, ?, ?, ?)",
-            (
-                data.get('timestamp', datetime.now().strftime('%d/%m/%Y %H:%M:%S')),
-                data['gioitinh'].strip(),
-                data['dienthoai'].strip(),
-                data['gopy'].strip(),
-                request.remote_addr or 'unknown'
-            )
+            "INSERT INTO responses (timestamp, gioitinh, dienthoai, gopy, ip_client) VALUES (?,?,?,?,?)",
+            (ts, data['gioitinh'].strip(), data['dienthoai'].strip(),
+             data['gopy'].strip(), request.remote_addr or 'unknown')
         )
         conn.commit()
-        new_id = c.lastrowid
+        rid = c.lastrowid
         conn.close()
 
-        print(f"✅ [{datetime.now().strftime('%H:%M:%S')}] Lưu #{new_id} "
-              f"| {data['gioitinh']} | SĐT: {data['dienthoai']} "
-              f"| IP: {request.remote_addr}")
-        return jsonify({"status": "success", "id": new_id})
+        print(f"✅ [{now_vn().strftime('%H:%M:%S')}] #{rid} | "
+              f"{data['gioitinh']} | SĐT: {data['dienthoai']} | IP: {request.remote_addr}")
+
+        send_telegram(
+            f"📋 <b>Góp ý mới – Quầy Viện Phí</b>\n"
+            f"👤 {data['gioitinh']}  |  📞 {data['dienthoai']}\n"
+            f"📝 {data['gopy']}\n🕐 {ts}"
+        )
+        return jsonify({"status": "success", "id": rid})
 
     except Exception as e:
         print(f"❌ Lỗi /save: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# ── API: Xem dữ liệu (dạng JSON) ─────────────────────────────────────────────
-@app.route('/view', methods=['GET'])
+@app.route('/view')
 def view_data():
+    """Xem toàn bộ dữ liệu dạng JSON (dùng để backup)."""
     try:
         conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT * FROM responses ORDER BY id DESC")
-        rows = c.fetchall()
+        rows = conn.execute("SELECT * FROM responses ORDER BY id DESC").fetchall()
         conn.close()
         data = [{"id": r[0], "timestamp": r[1], "gioitinh": r[2],
                  "dienthoai": r[3], "gopy": r[4]} for r in rows]
@@ -136,76 +139,139 @@ def view_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ── API: Xem dữ liệu dạng bảng HTML đẹp ─────────────────────────────────────
-@app.route('/admin', methods=['GET'])
-def admin():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT * FROM responses ORDER BY id DESC")
-        rows = c.fetchall()
-        conn.close()
-        total = len(rows)
-        
-# --- CHÈN VÀO ĐÂY ---
-        now_vn = datetime.now() + timedelta(hours=7) if os.environ.get('RENDER') else datetime.now()
-        time_str = now_vn.strftime('%d/%m/%Y, %H:%M:%S')
-        # ---------------------
-        
-        rows_html = ""
-        for r in rows:
-            gopy_short = (r[4][:80] + '…') if len(r[4]) > 80 else r[4]
-            rows_html += f"""
-            <tr>
-                <td>{r[0]}</td>
-                <td>{r[1]}</td>
-                <td><span class="badge">{r[2]}</span></td>
-                <td><a href="tel:{r[3]}">{r[3]}</a></td>
-                <td title="{r[4]}">{gopy_short}</td>
-            </tr>"""
+@app.route('/ping')
+def ping():
+    return jsonify({"status": "ok", "time": now_vn().strftime('%H:%M:%S'),
+                    "env": "render" if IS_CLOUD else "local"})
 
-        return f"""<!DOCTYPE html>
+# ══════════════════════════════════════════════════════
+#  ROUTES – QUẢN TRỊ (bảo mật, đường dẫn bí mật)
+# ══════════════════════════════════════════════════════
+
+# Chặn /admin cũ – trả 404 như không tồn tại
+@app.route('/admin')
+@app.route('/admin/')
+def block_admin():
+    return "Không tìm thấy.", 404
+
+LOGIN_HTML = '''<!DOCTYPE html>
 <html lang="vi"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Dữ liệu phản ánh, góp ý của khách hàng – Bệnh viện đa khoa Tâm Phúc</title>
+<title>Đăng nhập quản trị</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:sans-serif;background:#f0f9f5;min-height:100vh;
+       display:flex;align-items:center;justify-content:center}
+  .box{background:#fff;padding:2.5rem 2rem;border-radius:16px;
+       box-shadow:0 8px 32px rgba(10,110,86,.12);width:320px}
+  .ico{font-size:42px;text-align:center;margin-bottom:1rem}
+  h2{color:#085041;font-size:17px;margin-bottom:1.5rem;text-align:center}
+  label{font-size:13px;font-weight:600;color:#085041;display:block;margin-bottom:5px}
+  input{width:100%;padding:11px 14px;border:2px solid #d0d0d0;border-radius:8px;
+        font-size:14px;margin-bottom:14px;outline:none;font-family:inherit}
+  input:focus{border-color:#0F6E56;box-shadow:0 0 0 3px rgba(15,110,86,.1)}
+  button{width:100%;padding:13px;background:#0F6E56;color:#fff;border:none;
+         border-radius:8px;font-size:15px;font-weight:700;cursor:pointer}
+  button:hover{background:#085041}
+  .err{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;
+       padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px}
+</style></head><body>
+<div class="box">
+  <div class="ico">🔐</div>
+  <h2>Quản trị khảo sát</h2>
+  {% if error %}<div class="err">⚠ {{ error }}</div>{% endif %}
+  <form method="POST">
+    <label>Tên đăng nhập</label>
+    <input type="text" name="username" autocomplete="off" required>
+    <label>Mật khẩu</label>
+    <input type="password" name="password" required>
+    <button type="submit">Đăng nhập</button>
+  </form>
+</div>
+</body></html>'''
+
+@app.route(f'/{ADMIN_PATH}', methods=['GET', 'POST'])
+def admin_login():
+    if request.method == 'POST':
+        if (request.form.get('username') == ADMIN_USER and
+                request.form.get('password') == ADMIN_PASS):
+            session['logged_in'] = True
+            return redirect(url_for('admin_dashboard'))
+        return render_template_string(LOGIN_HTML, error="Sai tên đăng nhập hoặc mật khẩu.")
+    if logged_in():
+        return redirect(url_for('admin_dashboard'))
+    return render_template_string(LOGIN_HTML, error=None)
+
+@app.route(f'/{ADMIN_PATH}/dashboard')
+def admin_dashboard():
+    if not logged_in():
+        return redirect(url_for('admin_login'))
+
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("SELECT * FROM responses ORDER BY id DESC").fetchall()
+    conn.close()
+
+    rows_html = "".join(
+        f"<tr><td>{r[0]}</td><td>{r[1]}</td>"
+        f"<td><span class='badge'>{r[2]}</span></td>"
+        f"<td><a href='tel:{r[3]}'>{r[3]}</a></td>"
+        f"<td title='{r[4]}'>{r[4][:80]}{'…' if len(r[4]) > 80 else ''}</td></tr>"
+        for r in rows
+    )
+
+    return f'''<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quản trị – BVĐK Tâm Phúc</title>
 <style>
   body{{font-family:sans-serif;margin:0;padding:20px;background:#f0f9f5;color:#222}}
-  h2{{color:#085041;margin-bottom:4px}}
-  .meta{{color:#666;font-size:14px;margin-bottom:20px}}
-  table{{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08)}}
+  .top{{display:flex;align-items:center;justify-content:space-between;
+        margin-bottom:20px;flex-wrap:wrap;gap:10px}}
+  h2{{color:#085041;margin:0;font-size:18px}}
+  .meta{{color:#666;font-size:13px;margin-bottom:16px}}
+  .logout{{background:#e74c3c;color:#fff;border:none;padding:8px 18px;
+           border-radius:8px;font-size:13px;font-weight:600;
+           text-decoration:none;cursor:pointer}}
+  .logout:hover{{background:#c0392b}}
+  table{{width:100%;border-collapse:collapse;background:#fff;
+         border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08)}}
   th{{background:#0F6E56;color:#fff;padding:12px 14px;text-align:left;font-size:14px}}
   td{{padding:11px 14px;border-bottom:1px solid #eee;font-size:14px;vertical-align:top}}
   tr:last-child td{{border-bottom:none}}
   tr:hover td{{background:#f6fdf9}}
-  .badge{{background:#e0f4ed;color:#0F6E56;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}}
+  .badge{{background:#e0f4ed;color:#0F6E56;padding:3px 10px;
+          border-radius:20px;font-size:12px;font-weight:600}}
   a{{color:#0F6E56;text-decoration:none}}
-  .total{{display:inline-block;background:#0F6E56;color:#fff;border-radius:8px;padding:6px 18px;font-weight:700;font-size:15px;margin-bottom:16px}}
-  @media(max-width:600px){{td,th{{padding:8px 8px;font-size:12px}}}}
-</style></head>
-<body>
-  <h2>📋 Dữ liệu phản ánh, góp ý của khách hàng – Bệnh viện đa khoa Tâm Phúc</h2>
-  <div class="meta">Cập nhật: {time_str}</div> 
-  <div class="total">Tổng: {total} góp ý</div>
-  <table>
-    <tr><th>#</th><th>Thời gian gửi</th><th>Giới tính</th><th>Số điện thoại</th><th>Nội dung góp ý</th></tr>
-    {rows_html if rows else '<tr><td colspan="5" style="text-align:center;color:#888;padding:30px">Chưa có dữ liệu</td></tr>'}
-  </table>
-</body></html>"""
-    except Exception as e:
-        return f"<h3>Lỗi: {e}</h3>", 500
+  .total{{display:inline-block;background:#0F6E56;color:#fff;
+          border-radius:8px;padding:6px 18px;font-weight:700;
+          font-size:15px;margin-bottom:16px}}
+  @media(max-width:600px){{td,th{{padding:8px;font-size:12px}}}}
+</style></head><body>
+<div class="top">
+  <h2>📋 Phản ánh, góp ý – BVĐK Tâm Phúc</h2>
+  <a class="logout" href="/{ADMIN_PATH}/logout">Đăng xuất</a>
+</div>
+<div class="meta">Cập nhật: {now_vn().strftime('%d/%m/%Y, %H:%M:%S')}</div>
+<div class="total">Tổng: {len(rows)} góp ý</div>
+<table>
+  <tr><th>#</th><th>Thời gian gửi</th><th>Giới tính</th>
+      <th>Số điện thoại</th><th>Nội dung góp ý</th></tr>
+  {rows_html or '<tr><td colspan="5" style="text-align:center;color:#888;padding:30px">Chưa có dữ liệu</td></tr>'}
+</table>
+</body></html>'''
 
-# ── Health check ──────────────────────────────────────────────────────────────
-@app.route('/ping')
-def ping():
-    return jsonify({"status": "ok", "time": datetime.now().strftime('%H:%M:%S'),
-                    "env": "render" if os.environ.get('RENDER') else "local"})
+@app.route(f'/{ADMIN_PATH}/logout')
+def admin_logout():
+    session.clear()
+    return redirect(url_for('admin_login'))
 
-# ── Chạy ─────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════
+#  CHẠY
+# ══════════════════════════════════════════════════════
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    is_cloud = bool(os.environ.get('RENDER'))
 
-    if not is_cloud:
+    if not IS_CLOUD:
         import socket
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -216,10 +282,10 @@ if __name__ == '__main__':
             local_ip = "127.0.0.1"
 
         print("=" * 58)
-        print("🚀  Server đang chạy – LOCAL MODE")
-        print(f"   Máy này   : http://127.0.0.1:{port}")
-        print(f"   Mạng LAN  : http://{local_ip}:{port}")
-        print(f"   Xem data  : http://127.0.0.1:{port}/admin")
+        print("🚀  Server LOCAL đang chạy")
+        print(f"   Máy này      : http://127.0.0.1:{port}")
+        print(f"   Mạng LAN     : http://{local_ip}:{port}")
+        print(f"   🔐 Quản trị  : http://127.0.0.1:{port}/{ADMIN_PATH}")
         print("=" * 58)
 
-    app.run(host='0.0.0.0', port=port, debug=not is_cloud)
+    app.run(host='0.0.0.0', port=port, debug=not IS_CLOUD)
