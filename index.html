@@ -290,7 +290,7 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
     if (!validate()) return;
 
     setBusy(true);
-    showStatus('sending', '⏳ Đang gửi dữ liệu…');
+    showStatus('sending', '⏳ Đang gửi…');
 
     const payload = {
         timestamp: new Date().toLocaleString('vi-VN'),
@@ -349,8 +349,8 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
     /* ── Hiển thị kết quả ── */
     if (dbOK || emailOK) {
         const parts = [];
-        if (dbOK)    parts.push('💾 Lưu database');
-        if (emailOK) parts.push('📧 Gửi email');
+        if (dbOK)    parts.push('💾 Đã gửi ý kiến');
+		if (emailOK) parts.push('📧 Thành công');
         const warn = errs.length ? `<br><small style="opacity:.8">⚠ ${errs.join(' | ')}</small>` : '';
         showStatus(dbOK && emailOK ? 'success' : 'warning',
             `✅ ${parts.join(' & ')} thành công!${warn}`);
@@ -360,7 +360,7 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
         }, 1500);
     } else {
         showStatus('error',
-            `❌ Gửi thất bại:<br>${errs.map(e => `&nbsp;• ${e}`).join('<br>')}`);
+            `❌ Lỗi:<br>${errs.map(e => `&nbsp;• ${e}`).join('<br>')}`);
     }
 });
 </script>
