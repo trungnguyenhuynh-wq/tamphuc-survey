@@ -6,7 +6,7 @@ Chạy được cả LOCAL lẫn CLOUD (Render.com)
 from flask import (Flask, request, jsonify, send_from_directory,
                    session, redirect, url_for, render_template_string)
 from flask_cors import CORS
-import sqlite3, os, requests
+import sqlite3, os, request
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -36,17 +36,17 @@ TELEGRAM_CHAT_ID = ""   # VD: "-1001234567890"
 # ══════════════════════════════════════════════════════
 #  HELPERS
 # ══════════════════════════════════════════════════════
-def send_telegram(msg):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"},
-            timeout=5
-        )
-    except Exception as e:
-        print(f"Telegram lỗi: {e}")
+# def send_telegram(msg):
+    # if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        # return
+    # try:
+        # request.post(
+            # f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+            # json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"},
+            # timeout=5
+        # )
+    # except Exception as e:
+        # print(f"Telegram lỗi: {e}")
 
 def now_vn():
     """Giờ Việt Nam: Render chạy UTC nên +7, local lấy giờ máy."""
