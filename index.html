@@ -220,77 +220,85 @@
 </div>
 
 <script>
-/* ════════════════════════════════════════════════════════════
-   TỰ ĐỘNG XÁC ĐỊNH URL BACKEND
-   - Khi chạy trên Render (cloud): URL = chính trang này (cùng domain)
-   - Khi chạy local: URL = http://127.0.0.1:5000
-════════════════════════════════════════════════════════════ */
-const BACKEND = (() => {
-    const loc = window.location;
-    // Nếu trang mở từ file:// → local
-    if (loc.protocol === 'file:') return 'http://127.0.0.1:5000';
-    // Nếu trang phục vụ bởi Flask (cùng host/port) → dùng luôn origin hiện tại
-    return loc.origin;
-})();
+/* ====================== CẤU HÌNH BACKEND ====================== */
+// Ưu tiên dùng Cloudflare Worker để giấu link thật
+const BACKEND_URL = "https://tamphuc-survey.trung-nguyenhuynh.workers.dev";
 
-const EMAIL_DEST = '133nguyenthong@gmail.com';
+// Nếu muốn test trực tiếp Render (không qua worker) thì dùng dòng dưới:
+// const BACKEND_URL = "https://tamphuc-survey.onrender.com";
+
+const EMAIL_DEST = "133nguyenthong@gmail.com";
 
 /* ── UI Helpers ─────────────────────────────────────────── */
 const showStatus = (type, html) => {
-    const b = document.getElementById('statusBar');
-    b.className = type; b.innerHTML = html; b.style.display = 'block';
+    const bar = document.getElementById('statusBar');
+    bar.className = type;
+    bar.innerHTML = html;
+    bar.style.display = 'block';
 };
 
-const setBusy = on => {
-    document.getElementById('submitBtn').disabled = on;
+const setBusy = (on) => {
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = on;
     document.getElementById('spinner').style.display = on ? 'block' : 'none';
-    document.getElementById('btnText').textContent   = on ? 'Đang gửi…' : 'GỬI KHẢO SÁT';
+    document.getElementById('btnText').textContent = on ? 'Đang gửi…' : 'GỬI Ý KIẾN';
 };
 
-/* ── Radio ──────────────────────────────────────────────── */
-document.querySelectorAll('.radio-option input[type="radio"]').forEach(r => {
-    r.addEventListener('change', function () {
-        document.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
+/* ── Radio button styling ───────────────────────────────── */
+document.querySelectorAll('.radio-option input[type="radio"]').forEach(radio => {
+    radio.addEventListener('change', function () {
+        document.querySelectorAll('.radio-option').forEach(opt => opt.classList.remove('selected'));
         this.closest('.radio-option').classList.add('selected');
         document.getElementById('field-gioitinh').classList.remove('error');
     });
 });
 
-/* ── Realtime ───────────────────────────────────────────── */
+/* ── Character counter ──────────────────────────────────── */
 document.getElementById('gopy').addEventListener('input', function () {
     document.getElementById('charCount').textContent = this.value.length;
     if (this.value.trim()) document.getElementById('field-gopy').classList.remove('error');
 });
+
 document.getElementById('phone').addEventListener('input', function () {
     this.value = this.value.replace(/\D/g, '');
-    if (/^0\d{9}$/.test(this.value)) document.getElementById('field-phone').classList.remove('error');
+    if (/^0\d{9,10}$/.test(this.value)) {
+        document.getElementById('field-phone').classList.remove('error');
+    }
 });
 
-/* ── Validate ───────────────────────────────────────────── */
+/* ── Validation ─────────────────────────────────────────── */
 function validate() {
     let ok = true;
+
     if (!document.querySelector('input[name="gioitinh"]:checked')) {
-        document.getElementById('field-gioitinh').classList.add('error'); ok = false;
+        document.getElementById('field-gioitinh').classList.add('error');
+        ok = false;
     }
-    if (!/^0\d{9}$/.test(document.getElementById('phone').value.trim())) {
-        document.getElementById('field-phone').classList.add('error'); ok = false;
+
+    const phoneVal = document.getElementById('phone').value.trim();
+    if (!/^0\d{9,10}$/.test(phoneVal)) {
+        document.getElementById('field-phone').classList.add('error');
+        ok = false;
     }
+
     if (!document.getElementById('gopy').value.trim()) {
-        document.getElementById('field-gopy').classList.add('error'); ok = false;
+        document.getElementById('field-gopy').classList.add('error');
+        ok = false;
     }
+
     if (!ok) {
         document.querySelector('.field.error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     return ok;
 }
 
-/* ── Submit ─────────────────────────────────────────────── */
+/* ── Submit Form ────────────────────────────────────────── */
 document.getElementById('surveyForm').addEventListener('submit', async function (e) {
     e.preventDefault();
     if (!validate()) return;
 
     setBusy(true);
-    showStatus('sending', '⏳ Đang gửi…');
+    showStatus('sending', '⏳ Đang xử lý và gửi góp ý...');
 
     const payload = {
         timestamp: new Date().toLocaleString('vi-VN'),
@@ -302,65 +310,72 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
     let dbOK = false, emailOK = false;
     const errs = [];
 
-    /* ── 1. Lưu SQLite qua Flask ── */
+    /* 1. Lưu vào SQLite qua Backend (qua Cloudflare Worker) */
     try {
-        const res  = await fetch(`${BACKEND}/save`, {
+        const res = await fetch(`${BACKEND_URL}/save`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(10000)
+            signal: AbortSignal.timeout(15000)
         });
+
         const json = await res.json();
-        if (json.status === 'success') { dbOK = true; }
-        else errs.push('Database: ' + (json.message || 'lỗi'));
+        if (json.status === 'success') {
+            dbOK = true;
+        } else {
+            errs.push('Lưu dữ liệu: ' + (json.message || 'Lỗi server'));
+        }
     } catch (err) {
-        errs.push('Database: ' + err.message);
-        console.error('DB error:', err);
+        errs.push('Không kết nối được server lưu trữ');
+        console.error('DB Error:', err);
     }
 
-    /* ── 2. Gửi Email qua FormSubmit ──
-       FormSubmit /ajax/ nhận JSON, trả về JSON, không reload trang.
-       LẦU ĐẦU: cần vào email bấm "Activate" mới nhận được mail.         */
+    /* 2. Gửi email qua FormSubmit */
     try {
-        const res  = await fetch(`https://formsubmit.co/ajax/${EMAIL_DEST}`, {
+        const formData = new FormData();
+        formData.append('gioitinh', payload.gioitinh);
+        formData.append('dienthoai', payload.dienthoai);
+        formData.append('gopy', payload.gopy);
+        formData.append('thoigian', payload.timestamp);
+        formData.append('_subject', `[BVĐK Tâm Phúc] Góp ý từ ${payload.dienthoai}`);
+        formData.append('_captcha', 'false');
+
+        const res = await fetch(`https://formsubmit.co/ajax/${EMAIL_DEST}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({
-                gioitinh:  payload.gioitinh,
-                dienthoai: payload.dienthoai,
-                gopy:      payload.gopy,
-                thoigian:  payload.timestamp,
-                _subject:  `[BVĐK Tâm Phúc] Ý kiến từ khách hàng có số điện thoại ${payload.dienthoai}`,
-                _captcha:  'false',
-                _template: 'table'
-            }),
+            headers: { 'Accept': 'application/json' },
+            body: formData,
             signal: AbortSignal.timeout(10000)
         });
+
         const json = await res.json();
-        if (json.success === 'true' || json.success === true) { emailOK = true; }
-        else errs.push('Email: ' + (json.message || 'chưa kích hoạt FormSubmit'));
+        if (json.success) {
+            emailOK = true;
+        } else {
+            errs.push('Gửi email: ' + (json.message || 'Chưa kích hoạt FormSubmit'));
+        }
     } catch (err) {
-        errs.push('Email: mất kết nối Internet');
-        console.error('Email error:', err);
+        errs.push('Gửi email thất bại (kiểm tra mạng)');
+        console.error('Email Error:', err);
     }
 
     setBusy(false);
 
-    /* ── Hiển thị kết quả ── */
+    /* Hiển thị kết quả */
     if (dbOK || emailOK) {
-        const parts = [];
-        if (dbOK)    parts.push('💾 Gửi ý kiến');
-		/*if (emailOK) parts.push('📧 Thành công');*/
-        const warn = errs.length ? `<br><small style="opacity:.8">⚠ ${errs.join(' | ')}</small>` : '';
-        showStatus(dbOK && emailOK ? 'success' : 'warning',
-            `✅ ${parts.join(' & ')} thành công!${warn}`);
+        const successText = dbOK && emailOK 
+            ? "✅ Đã lưu dữ liệu và gửi email thành công!" 
+            : dbOK 
+                ? "✅ Đã lưu dữ liệu thành công!" 
+                : "✅ Đã gửi email thành công!";
+
+        showStatus('success', successText);
+
         setTimeout(() => {
-            document.getElementById('surveyForm').style.display    = 'none';
+            document.getElementById('surveyForm').style.display = 'none';
             document.getElementById('successMessage').style.display = 'block';
-        }, 1500);
+        }, 1200);
     } else {
-        showStatus('error',
-            `❌ Lỗi:<br>${errs.map(e => `&nbsp;• ${e}`).join('<br>')}`);
+        showStatus('error', `❌ Gặp lỗi:<br>${errs.map(e => `• ${e}`).join('<br>')}`);
     }
 });
 </script>
