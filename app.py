@@ -12,6 +12,35 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__)
 CORS(app)  # Cho phép mọi origin trên Internet
+# ══════════════════════════════════════════════════════
+#  CẤU HÌNH BẢO MẬT – CHỈ SỬA Ở ĐÂY
+# ══════════════════════════════════════════════════════
+SECRET_KEY    = "tamphuc@2026!xyz"   # ← Đổi thành chuỗi bí mật bất kỳ
+ADMIN_PATH    = "quantritamphuc"      # ← Đường dẫn bí mật (không dùng /admin)
+ADMIN_USER    = "tamphuc"            # ← Tên đăng nhập
+ADMIN_PASS    = "Abc@123456"         # ← Mật khẩu (đổi thành mật khẩu mạnh)
+
+app.secret_key = SECRET_KEY
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH  = os.path.join(BASE_DIR, 'survey.db')
+
+TELEGRAM_TOKEN   = ""
+TELEGRAM_CHAT_ID = ""
+
+def send_telegram(msg):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"},
+            timeout=5
+        )
+    except Exception as e:
+        print(f"Telegram lỗi: {e}")
+
+
 
 # ── Đường dẫn database ────────────────────────────────────────────────────────
 # Render.com dùng /tmp để ghi file (thư mục ghi được trên free tier)
@@ -38,15 +67,22 @@ def init_db():
     print(f"✅ Database: {DB_PATH}")
 
 init_db()
-
+def check_login():
+    return session.get('logged_in') is True
+    
 # ── Phục vụ giao diện HTML ────────────────────────────────────────────────────
 @app.route('/')
 def index():
     return send_from_directory(BASE_DIR, 'index.html')
 
 @app.route('/<path:filename>')
-def static_files(filename):
-    return send_from_directory(BASE_DIR, filename)
+@app.route('/<path:f>')
+def static_files(f):
+    # Chặn truy cập trực tiếp vào file nội bộ
+    blocked = ['app.py', 'wsgi.py', 'survey.db', '.env']
+    if f in blocked or f.startswith('.'):
+        return "Không tìm thấy.", 404
+    return send_from_directory(BASE_DIR, f)
 
 # ── API: Lưu khảo sát ─────────────────────────────────────────────────────────
 @app.route('/save', methods=['POST'])
