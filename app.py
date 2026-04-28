@@ -7,7 +7,8 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+
 
 app = Flask(__name__)
 CORS(app)  # Cho phép mọi origin trên Internet
@@ -109,7 +110,12 @@ def admin():
         rows = c.fetchall()
         conn.close()
         total = len(rows)
-
+        
+# --- CHÈN VÀO ĐÂY ---
+        now_vn = datetime.now() + timedelta(hours=7) if os.environ.get('RENDER') else datetime.now()
+        time_str = now_vn.strftime('%d/%m/%Y, %H:%M:%S')
+        # ---------------------
+        
         rows_html = ""
         for r in rows:
             gopy_short = (r[4][:80] + '…') if len(r[4]) > 80 else r[4]
@@ -142,7 +148,7 @@ def admin():
 </style></head>
 <body>
   <h2>📋 Dữ liệu phản ánh, góp ý của khách hàng – Bệnh viện đa khoa Tâm Phúc</h2>
-  <div class="meta">Cập nhật: {datetime.now().strftime('%d/%m/%Y')}</div>
+  <div class="meta">Cập nhật: {time_str}</div> 
   <div class="total">Tổng: {total} góp ý</div>
   <table>
     <tr><th>#</th><th>Thời gian gửi</th><th>Giới tính</th><th>Số điện thoại</th><th>Nội dung góp ý</th></tr>
