@@ -192,16 +192,16 @@
                 <!-- Góp ý -->
                 <div class="field" id="field-gopy">
                     <label class="field-label" for="gopy">
-                        Anh/Chị có góp ý gì để cải thiện chất lượng phục vụ?
+                        Vui lòng nhập phản ánh, góp ý của Anh/Chị để Bệnh viện cải thiện chất lượng phục vụ
                         <span style="color:var(--accent)">*</span>
                     </label>
-                    <textarea id="gopy" placeholder="Vui lòng chia sẻ ý kiến đóng góp của Anh/Chị..." maxlength="1000"></textarea>
+                    <textarea id="gopy" placeholder="Vui lòng chia sẻ ý kiến của Anh/Chị..." maxlength="1000"></textarea>
                     <div class="char-count"><span id="charCount">0</span>/1000 ký tự</div>
-                    <div class="field-error">⚠ Vui lòng nhập góp ý của Anh/Chị.</div>
+                    <div class="field-error">⚠ Vui lòng nhập phản ánh, góp ý của Anh/Chị.</div>
                 </div>
 
                 <button type="submit" class="submit-btn" id="submitBtn">
-                    <span id="btnText">GỬI GÓP Ý</span>
+                    <span id="btnText">GỬI Ý KIẾN</span>
                     <div class="spinner" id="spinner"></div>
                 </button>
             </form>
@@ -330,7 +330,7 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
                 dienthoai: payload.dienthoai,
                 gopy:      payload.gopy,
                 thoigian:  payload.timestamp,
-                _subject:  `[BVĐK Tâm Phúc] Góp ý từ ${payload.dienthoai} (${payload.gioitinh})`,
+                _subject:  `[BVĐK Tâm Phúc] Ý kiến từ khách hàng có số điện thoại ${payload.dienthoai}`,
                 _captcha:  'false',
                 _template: 'table'
             }),
@@ -349,8 +349,8 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
     /* ── Hiển thị kết quả ── */
     if (dbOK || emailOK) {
         const parts = [];
-        if (dbOK)    parts.push('💾 Đã gửi ý kiến');
-		if (emailOK) parts.push('📧 Thành công');
+        if (dbOK)    parts.push('💾 Gửi ý kiến');
+		/*if (emailOK) parts.push('📧 Thành công');*/
         const warn = errs.length ? `<br><small style="opacity:.8">⚠ ${errs.join(' | ')}</small>` : '';
         showStatus(dbOK && emailOK ? 'success' : 'warning',
             `✅ ${parts.join(' & ')} thành công!${warn}`);

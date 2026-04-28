@@ -1,5 +1,5 @@
 """
-BVĐK Tâm Phúc – Hệ thống Tiếp nhận phản ánh, góp ý của Khách hàng
+Bệnh viện đa khoa Tâm Phúc – Công cụ Tiếp nhận phản ánh, góp ý của Khách hàng
 Chạy được cả LOCAL lẫn CLOUD (Render.com)
 """
 
@@ -125,7 +125,7 @@ def admin():
         return f"""<!DOCTYPE html>
 <html lang="vi"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Dữ liệu phản ánh, góp ý của khách hàng – BVĐK Tâm Phúc</title>
+<title>Dữ liệu phản ánh, góp ý của khách hàng – Bệnh viện đa khoa Tâm Phúc</title>
 <style>
   body{{font-family:sans-serif;margin:0;padding:20px;background:#f0f9f5;color:#222}}
   h2{{color:#085041;margin-bottom:4px}}
@@ -141,11 +141,11 @@ def admin():
   @media(max-width:600px){{td,th{{padding:8px 8px;font-size:12px}}}}
 </style></head>
 <body>
-  <h2>📋 Dữ liệu phản ánh, góp ý của khách hàng – BVĐK Tâm Phúc</h2>
-  <div class="meta">Cập nhật: {datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
-  <div class="total">Tổng: {total} phản hồi</div>
+  <h2>📋 Dữ liệu phản ánh, góp ý của khách hàng – Bệnh viện đa khoa Tâm Phúc</h2>
+  <div class="meta">Cập nhật: {datetime.now()}</div>
+  <div class="total">Tổng: {total} góp ý</div>
   <table>
-    <tr><th>#</th><th>Thời gian</th><th>Giới tính</th><th>Điện thoại</th><th>Góp ý</th></tr>
+    <tr><th>#</th><th>Thời gian gửi</th><th>Giới tính</th><th>Số điện thoại</th><th>Nội dung góp ý</th></tr>
     {rows_html if rows else '<tr><td colspan="5" style="text-align:center;color:#888;padding:30px">Chưa có dữ liệu</td></tr>'}
   </table>
 </body></html>"""
