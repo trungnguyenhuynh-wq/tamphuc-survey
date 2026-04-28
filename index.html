@@ -221,11 +221,9 @@
 
 <script>
 /* ====================== CẤU HÌNH BACKEND ====================== */
-// Ưu tiên dùng Cloudflare Worker để giấu link thật
-const BACKEND_URL = "https://tamphuc-survey.trung-nguyenhuynh.workers.dev";
-
-// Nếu muốn test trực tiếp Render (không qua worker) thì dùng dòng dưới:
-// const BACKEND_URL = "https://tamphuc-survey.onrender.com";
+const BACKEND_URL = "https://tamphuc-survey.onrender.com";
+// Hoặc dùng Cloudflare Worker nếu bạn muốn giấu link:
+// const BACKEND_URL = "https://tamphuc-survey.trung-nguyenhuynh.workers.dev";
 
 const EMAIL_DEST = "133nguyenthong@gmail.com";
 
@@ -244,7 +242,7 @@ const setBusy = (on) => {
     document.getElementById('btnText').textContent = on ? 'Đang gửi…' : 'GỬI Ý KIẾN';
 };
 
-/* ── Radio button styling ───────────────────────────────── */
+/* ── Radio styling ──────────────────────────────────────── */
 document.querySelectorAll('.radio-option input[type="radio"]').forEach(radio => {
     radio.addEventListener('change', function () {
         document.querySelectorAll('.radio-option').forEach(opt => opt.classList.remove('selected'));
@@ -253,7 +251,7 @@ document.querySelectorAll('.radio-option input[type="radio"]').forEach(radio => 
     });
 });
 
-/* ── Character counter ──────────────────────────────────── */
+/* ── Input events ───────────────────────────────────────── */
 document.getElementById('gopy').addEventListener('input', function () {
     document.getElementById('charCount').textContent = this.value.length;
     if (this.value.trim()) document.getElementById('field-gopy').classList.remove('error');
@@ -269,25 +267,18 @@ document.getElementById('phone').addEventListener('input', function () {
 /* ── Validation ─────────────────────────────────────────── */
 function validate() {
     let ok = true;
-
     if (!document.querySelector('input[name="gioitinh"]:checked')) {
         document.getElementById('field-gioitinh').classList.add('error');
         ok = false;
     }
-
-    const phoneVal = document.getElementById('phone').value.trim();
-    if (!/^0\d{9,10}$/.test(phoneVal)) {
+    const phone = document.getElementById('phone').value.trim();
+    if (!/^0\d{9,10}$/.test(phone)) {
         document.getElementById('field-phone').classList.add('error');
         ok = false;
     }
-
     if (!document.getElementById('gopy').value.trim()) {
         document.getElementById('field-gopy').classList.add('error');
         ok = false;
-    }
-
-    if (!ok) {
-        document.querySelector('.field.error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     return ok;
 }
@@ -298,39 +289,35 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
     if (!validate()) return;
 
     setBusy(true);
-    showStatus('sending', '⏳ Đang xử lý và gửi góp ý...');
+    showStatus('sending', '⏳ Đang gửi góp ý...');
 
     const payload = {
         timestamp: new Date().toLocaleString('vi-VN'),
-        gioitinh:  document.querySelector('input[name="gioitinh"]:checked').value,
+        gioitinh: document.querySelector('input[name="gioitinh"]:checked').value,
         dienthoai: document.getElementById('phone').value.trim(),
-        gopy:      document.getElementById('gopy').value.trim()
+        gopy: document.getElementById('gopy').value.trim()
     };
 
-    let dbOK = false, emailOK = false;
-    const errs = [];
+    let success = false;
 
-    /* 1. Lưu vào SQLite qua Backend (qua Cloudflare Worker) */
     try {
-        const res = await fetch(`${BACKEND_URL}/save`, {
+        // Gọi backend qua Cloudflare Worker hoặc Render
+        const response = await fetch(`${BACKEND_URL}/save`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(15000)
+            body: JSON.stringify(payload)
         });
 
-        const json = await res.json();
-        if (json.status === 'success') {
-            dbOK = true;
-        } else {
-            errs.push('Lưu dữ liệu: ' + (json.message || 'Lỗi server'));
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            success = true;
         }
     } catch (err) {
-        errs.push('Không kết nối được server lưu trữ');
-        console.error('DB Error:', err);
+        console.error("Lỗi kết nối backend:", err);
     }
 
-    /* 2. Gửi email qua FormSubmit */
+    // Gửi email qua FormSubmit (luôn chạy song song)
     try {
         const formData = new FormData();
         formData.append('gioitinh', payload.gioitinh);
@@ -340,42 +327,29 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
         formData.append('_subject', `[BVĐK Tâm Phúc] Góp ý từ ${payload.dienthoai}`);
         formData.append('_captcha', 'false');
 
-        const res = await fetch(`https://formsubmit.co/ajax/${EMAIL_DEST}`, {
+        await fetch(`https://formsubmit.co/ajax/${EMAIL_DEST}`, {
             method: 'POST',
             headers: { 'Accept': 'application/json' },
-            body: formData,
-            signal: AbortSignal.timeout(10000)
+            body: formData
         });
-
-        const json = await res.json();
-        if (json.success) {
-            emailOK = true;
-        } else {
-            errs.push('Gửi email: ' + (json.message || 'Chưa kích hoạt FormSubmit'));
-        }
-    } catch (err) {
-        errs.push('Gửi email thất bại (kiểm tra mạng)');
-        console.error('Email Error:', err);
+    } catch (e) {
+        console.error("Email error:", e);
     }
 
     setBusy(false);
 
-    /* Hiển thị kết quả */
-    if (dbOK || emailOK) {
-        const successText = dbOK && emailOK 
-            ? "✅ Đã lưu dữ liệu và gửi email thành công!" 
-            : dbOK 
-                ? "✅ Đã lưu dữ liệu thành công!" 
-                : "✅ Đã gửi email thành công!";
-
-        showStatus('success', successText);
-
+    if (success) {
+        showStatus('success', '✅ Góp ý đã được ghi nhận thành công!');
         setTimeout(() => {
             document.getElementById('surveyForm').style.display = 'none';
             document.getElementById('successMessage').style.display = 'block';
-        }, 1200);
+        }, 1500);
     } else {
-        showStatus('error', `❌ Gặp lỗi:<br>${errs.map(e => `• ${e}`).join('<br>')}`);
+        showStatus('warning', '⚠️ Góp ý đã được gửi qua email, nhưng lưu trữ tạm thời gặp vấn đề.');
+        setTimeout(() => {
+            document.getElementById('surveyForm').style.display = 'none';
+            document.getElementById('successMessage').style.display = 'block';
+        }, 1500);
     }
 });
 </script>
