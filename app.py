@@ -1,5 +1,5 @@
 """
-BVĐK Tâm Phúc – Hệ thống khảo sát hài lòng
+BVĐK Tâm Phúc – Hệ thống Tiếp nhận phản ánh, góp ý của Khách hàng
 Chạy được cả LOCAL lẫn CLOUD (Render.com)
 """
 
