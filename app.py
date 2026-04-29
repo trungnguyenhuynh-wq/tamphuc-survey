@@ -32,7 +32,8 @@ DB_PATH  = '/tmp/survey.db' if IS_CLOUD else os.path.join(BASE_DIR, 'survey.db')
 # ── Telegram (để trống nếu chưa dùng) ───────────────
 TELEGRAM_TOKEN   = ""   # VD: "7123456789:AAGxxxxxxx"
 TELEGRAM_CHAT_ID = ""   # VD: "-1001234567890"
-
+# Google Sheets Web App URL
+SHEETS_URL = "https://script.google.com/macros/s/AKfycbya8coHKGvB2_KtfgUcWYAFGThP2mQjFdswDeoCfMpSJN8pYJI_TB_eAOhibCVve3Q8/exec"   # ← DÁN URL VÀO ĐÂY
 # ══════════════════════════════════════════════════════
 #  HELPERS
 # ══════════════════════════════════════════════════════
@@ -47,7 +48,14 @@ def send_telegram(msg):
         )
     except Exception as e:
         print(f"Telegram lỗi: {e}")
-
+def send_to_sheets(data):
+    if not SHEETS_URL:
+        return
+    try:
+        requests.post(SHEETS_URL, json=data, timeout=10)
+        print("✅ Đã gửi dữ liệu lên Google Sheets")
+    except Exception as e:
+        print(f"❌ Gửi Sheets lỗi: {e}")
 def now_vn():
     """Giờ Việt Nam: Render chạy UTC nên +7, local lấy giờ máy."""
     return (datetime.utcnow() + timedelta(hours=7)) if IS_CLOUD else datetime.now()
@@ -120,6 +128,10 @@ def save_survey():
             f"👤 {data['gioitinh']}  |  📞 {data['dienthoai']}\n"
             f"📝 {data['gopy']}\n🕐 {ts}"
         )
+        # ←←← THÊM DÒNG NÀY
+        send_to_sheets(data)
+        
+        return jsonify({"status": "success", "id": rid})
         return jsonify({"status": "success", "id": rid})
 
     except Exception as e:
