@@ -48,14 +48,20 @@ def send_telegram(msg):
         )
     except Exception as e:
         print(f"Telegram lỗi: {e}")
-def send_to_sheets(data):
+def send_to_google_sheets(data):
     if not SHEETS_URL:
+        print("⚠️ SHEETS_URL chưa được cấu hình")
         return
+    
     try:
-        requests.post(SHEETS_URL, json=data, timeout=10)
-        print("✅ Đã gửi dữ liệu lên Google Sheets")
+        response = requests.post(SHEETS_URL, json=data, timeout=10)
+        if response.status_code == 200:
+            print("✅ Đã gửi thành công lên Google Sheets")
+        else:
+            print(f"⚠️ Sheets trả về status: {response.status_code}")
     except Exception as e:
-        print(f"❌ Gửi Sheets lỗi: {e}")
+        print(f"❌ Lỗi gửi Google Sheets: {e}")
+        
 def now_vn():
     """Giờ Việt Nam: Render chạy UTC nên +7, local lấy giờ máy."""
     return (datetime.utcnow() + timedelta(hours=7)) if IS_CLOUD else datetime.now()
@@ -128,8 +134,7 @@ def save_survey():
             f"👤 {data['gioitinh']}  |  📞 {data['dienthoai']}\n"
             f"📝 {data['gopy']}\n🕐 {ts}"
         )
-        # ←←← THÊM DÒNG NÀY
-        send_to_sheets(data)
+        send_to_google_sheets(data) # ← THÊM DÒNG NÀY
         
         return jsonify({"status": "success", "id": rid})
         return jsonify({"status": "success", "id": rid})
