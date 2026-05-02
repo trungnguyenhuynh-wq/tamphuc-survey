@@ -137,7 +137,6 @@ def save_survey():
         send_to_google_sheets(data) # ← THÊM DÒNG NÀY
         
         return jsonify({"status": "success", "id": rid})
-        return jsonify({"status": "success", "id": rid})
 
     except Exception as e:
         print(f"❌ Lỗi /save: {e}")

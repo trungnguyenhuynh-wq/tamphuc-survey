@@ -201,7 +201,7 @@
                 </div>
 
                 <button type="submit" class="submit-btn" id="submitBtn">
-                    <span id="btnText">GỬI Ý KIẾN</span>
+                    <span id="btnText">GỬI</span>
                     <div class="spinner" id="spinner"></div>
                 </button>
             </form>
@@ -209,8 +209,7 @@
             <div class="success-message" id="successMessage">
                 <div class="success-icon">✅</div>
                 <h2>Cảm ơn Anh/Chị!</h2>
-                <p>Phản hồi của Anh/Chị đã được ghi nhận thành công.<br>
-                   Chúng tôi sẽ sử dụng để cải thiện chất lượng phục vụ.</p>
+                <p>Phản hồi của Anh/Chị đã được ghi nhận để cải thiện chất lượng phục vụ.</p>
             </div>
         </div>
     </div>
@@ -339,7 +338,7 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
     setBusy(false);
 
     if (success) {
-        showStatus('success', '✅ Góp ý đã được ghi nhận thành công!');
+        showStatus('success', '✅ Ghi nhận thành công!');
         setTimeout(() => {
             document.getElementById('surveyForm').style.display = 'none';
             document.getElementById('successMessage').style.display = 'block';
