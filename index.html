@@ -288,7 +288,7 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
     if (!validate()) return;
 
     setBusy(true);
-    showStatus('sending', '⏳ Đang gửi góp ý...');
+    showStatus('sending', '⏳ Đang gửi...');
 
     const payload = {
         timestamp: new Date().toLocaleString('vi-VN'),
@@ -338,7 +338,7 @@ document.getElementById('surveyForm').addEventListener('submit', async function 
     setBusy(false);
 
     if (success) {
-        showStatus('success', '✅ Ghi nhận thành công!');
+        showStatus('success', '✅ Gửi thành công!');
         setTimeout(() => {
             document.getElementById('surveyForm').style.display = 'none';
             document.getElementById('successMessage').style.display = 'block';
